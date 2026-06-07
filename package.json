@@ -1,6 +1,6 @@
 {
   "name": "inventory-compare-app",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Phan mem so sanh du lieu kho va du lieu thiet ke tu Excel",
   "main": "main.js",
   "scripts": {
@@ -19,6 +19,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "pokemon1742000-commits",
+        "repo": "Assem_CompareDataBOM"
+      }
+    ],
     "files": [
       "index.html",
       "main.js",
@@ -46,7 +53,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "artifactName": "Inventory-Compare-Setup-${version}-${arch}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
@@ -54,7 +61,7 @@
       "shortcutName": "Inventory Compare"
     },
     "portable": {
-      "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
+      "artifactName": "Inventory-Compare-Portable-${version}-${arch}.${ext}"
     }
   },
   "devDependencies": {
@@ -62,6 +69,7 @@
     "electron-builder": "^26.15.0"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "fuse.js": "^7.4.2",
     "xlsx": "^0.18.5"

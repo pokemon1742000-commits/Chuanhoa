@@ -7,5 +7,9 @@ contextBridge.exposeInMainWorld('inventoryApi', {
   exportDiscrepancy: (payload) => ipcRenderer.invoke('excel:exportDiscrepancy', payload),
   loadRecent: () => ipcRenderer.invoke('recent:load'),
   saveRecent: (payload) => ipcRenderer.invoke('recent:save', payload),
-  clearRecent: () => ipcRenderer.invoke('recent:clear')
+  clearRecent: () => ipcRenderer.invoke('recent:clear'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update:status', (_event, message) => callback(message));
+  }
 });

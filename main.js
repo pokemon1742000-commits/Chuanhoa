@@ -3,6 +3,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
+const { autoUpdater } = require('electron-updater');
+
+let mainWindow;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -17,6 +20,7 @@ function createWindow() {
     }
   });
 
+  mainWindow = win;
   win.loadFile('index.html');
 }
 
@@ -24,29 +28,30 @@ ipcMain.handle('excel:open', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Chon file Excel',
     filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'xlsm', 'csv'] }],
-    properties: ['openFile']
+    properties: ['openFile', 'multiSelections']
   });
 
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
 
-  const filePath = result.filePaths[0];
-  const workbook = XLSX.readFile(filePath, { cellDates: false, raw: false });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: '',
-    blankrows: false
-  });
+  return result.filePaths.map(readExcelFile);
+});
 
-  return {
-    filePath,
-    fileName: path.basename(filePath),
-    sheetName,
-    rows
-  };
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) {
+    return { message: 'Chức năng update chỉ hoạt động trên bản đã build exe.' };
+  }
+
+  try {
+    sendUpdateStatus('Đang kiểm tra phiên bản mới...');
+    await autoUpdater.checkForUpdates();
+    return { message: 'Đang kiểm tra phiên bản mới...' };
+  } catch (error) {
+    const message = `Không thể kiểm tra update: ${error.message}`;
+    sendUpdateStatus(message);
+    return { message };
+  }
 });
 
 ipcMain.handle('recent:load', async () => {
@@ -322,8 +327,56 @@ function getTimestamp() {
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
 }
 
+function sendUpdateStatus(message) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:status', message);
+  }
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus('Đang kiểm tra phiên bản mới...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus(`Có phiên bản mới ${info.version}. Đang tải về...`);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus('Bạn đang dùng phiên bản mới nhất.');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdateStatus(`Đang tải update: ${Math.round(progress.percent)}%`);
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    sendUpdateStatus(`Đã tải xong phiên bản ${info.version}.`);
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Khởi động lại để cập nhật', 'Để sau'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Cập nhật phiên bản mới',
+      message: `Đã tải xong phiên bản ${info.version}. Khởi động lại app để cập nhật ngay?`
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  autoUpdater.on('error', (error) => {
+    sendUpdateStatus(`Lỗi update: ${error.message}`);
+  });
+}
+
 app.whenReady().then(() => {
   createWindow();
+  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

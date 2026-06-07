@@ -83,6 +83,7 @@ function bindElements() {
     'loadKhoBtn',
     'loadBomBtn',
     'clearBtn',
+    'updateBtn',
     'exportExcelBtn',
     'exportBtn',
     'searchInput',
@@ -117,8 +118,10 @@ function bindEvents() {
   els.loadKhoBtn.addEventListener('click', loadKhoFile);
   els.loadBomBtn.addEventListener('click', loadBomFile);
   els.clearBtn.addEventListener('click', clearData);
+  els.updateBtn.addEventListener('click', checkForUpdates);
   els.exportExcelBtn.addEventListener('click', exportCurrentTable);
   els.exportBtn.addEventListener('click', exportReport);
+  window.inventoryApi.onUpdateStatus((message) => showToast(message));
   document.querySelectorAll('.theme-dot').forEach((button) => {
     button.addEventListener('click', () => {
       applyTheme(button.dataset.theme);
@@ -146,13 +149,13 @@ function applyTheme(themeName) {
 
 async function loadKhoFile() {
   try {
-    const result = await window.inventoryApi.openExcel();
-    if (!result) return;
+    const files = normalizeLoadedFiles(await window.inventoryApi.openExcel());
+    if (!files.length) return;
 
-    const parsedRows = parseKhoRows(result.rows);
-    state.khoPaths = appendPath(state.khoPaths, result.filePath);
+    const parsedRows = files.flatMap((file) => parseKhoRows(file.rows));
+    state.khoPaths = appendPaths(state.khoPaths, files.map((file) => file.filePath));
     state.khoRows = renumberRows(state.khoRows.concat(parsedRows));
-    state.khoFileName = appendFileName(state.khoFileName, `${result.fileName} / ${result.sheetName}`);
+    state.khoFileName = appendFileName(state.khoFileName, files.map(formatFileLabel).join('; '));
     state.compareRows = [];
     state.discrepancyRows = [];
     state.confirmRows = [];
@@ -161,7 +164,7 @@ async function loadKhoFile() {
 
     await saveRecentFiles();
     autoCompareAfterLoad('kho');
-    showToast(`Đã thêm ${parsedRows.length} dòng kho. Tổng hiện có ${state.khoRows.length} dòng.`);
+    showToast(`Đã thêm ${parsedRows.length} dòng kho từ ${files.length} file. Tổng hiện có ${state.khoRows.length} dòng.`);
   } catch (error) {
     showToast(`Không thể load file kho: ${error.message}`);
   }
@@ -169,13 +172,13 @@ async function loadKhoFile() {
 
 async function loadBomFile() {
   try {
-    const result = await window.inventoryApi.openExcel();
-    if (!result) return;
+    const files = normalizeLoadedFiles(await window.inventoryApi.openExcel());
+    if (!files.length) return;
 
-    const parsedRows = parseBomRows(result.rows);
-    state.bomPaths = appendPath(state.bomPaths, result.filePath);
+    const parsedRows = files.flatMap((file) => parseBomRows(file.rows));
+    state.bomPaths = appendPaths(state.bomPaths, files.map((file) => file.filePath));
     state.bomRows = renumberRows(state.bomRows.concat(parsedRows));
-    state.bomFileName = appendFileName(state.bomFileName, `${result.fileName} / ${result.sheetName}`);
+    state.bomFileName = appendFileName(state.bomFileName, files.map(formatFileLabel).join('; '));
     state.compareRows = [];
     state.discrepancyRows = [];
     state.confirmRows = [];
@@ -184,9 +187,21 @@ async function loadBomFile() {
 
     await saveRecentFiles();
     autoCompareAfterLoad('bom');
-    showToast(`Đã thêm ${parsedRows.length} dòng BOM. Tổng hiện có ${state.bomRows.length} dòng.`);
+    showToast(`Đã thêm ${parsedRows.length} dòng BOM từ ${files.length} file. Tổng hiện có ${state.bomRows.length} dòng.`);
   } catch (error) {
     showToast(`Không thể load file BOM: ${error.message}`);
+  }
+}
+
+async function checkForUpdates() {
+  try {
+    els.updateBtn.disabled = true;
+    const result = await window.inventoryApi.checkForUpdates();
+    if (result?.message) showToast(result.message);
+  } catch (error) {
+    showToast(`Không thể kiểm tra update: ${error.message}`);
+  } finally {
+    els.updateBtn.disabled = false;
   }
 }
 
@@ -217,8 +232,13 @@ async function restoreRecentFiles() {
   }
 }
 
-function appendPath(paths, filePath) {
-  return Array.from(new Set(paths.concat(filePath)));
+function normalizeLoadedFiles(result) {
+  if (!result) return [];
+  return Array.isArray(result) ? result : [result];
+}
+
+function appendPaths(paths, nextPaths) {
+  return Array.from(new Set(paths.concat(nextPaths)));
 }
 
 function formatFileLabel(file) {
