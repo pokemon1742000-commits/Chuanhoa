@@ -5,6 +5,8 @@ const state = {
   bomFileName: '',
   khoPaths: [],
   bomPaths: [],
+  khoSources: [],
+  bomSources: [],
   khoRows: [],
   bomRows: [],
   compareRows: [],
@@ -149,10 +151,11 @@ function applyTheme(themeName) {
 
 async function loadKhoFile() {
   try {
-    const files = normalizeLoadedFiles(await window.inventoryApi.openExcel());
+    const files = await loadSelectedExcelFiles();
     if (!files.length) return;
 
     const parsedRows = files.flatMap((file) => parseKhoRows(file.rows));
+    state.khoSources = appendSources(state.khoSources, files.map(toFileSource));
     state.khoPaths = appendPaths(state.khoPaths, files.map((file) => file.filePath));
     state.khoRows = renumberRows(state.khoRows.concat(parsedRows));
     state.khoFileName = appendFileName(state.khoFileName, files.map(formatFileLabel).join('; '));
@@ -172,10 +175,11 @@ async function loadKhoFile() {
 
 async function loadBomFile() {
   try {
-    const files = normalizeLoadedFiles(await window.inventoryApi.openExcel());
+    const files = await loadSelectedExcelFiles();
     if (!files.length) return;
 
     const parsedRows = files.flatMap((file) => parseBomRows(file.rows));
+    state.bomSources = appendSources(state.bomSources, files.map(toFileSource));
     state.bomPaths = appendPaths(state.bomPaths, files.map((file) => file.filePath));
     state.bomRows = renumberRows(state.bomRows.concat(parsedRows));
     state.bomFileName = appendFileName(state.bomFileName, files.map(formatFileLabel).join('; '));
@@ -205,6 +209,77 @@ async function checkForUpdates() {
   }
 }
 
+async function loadSelectedExcelFiles() {
+  const fileInfos = normalizeLoadedFiles(await window.inventoryApi.openExcel());
+  if (!fileInfos.length) return [];
+
+  const selections = await selectExcelSheets(fileInfos);
+  if (!selections.length) return [];
+
+  return window.inventoryApi.readExcelSheets(selections);
+}
+
+async function selectExcelSheets(fileInfos) {
+  const multiSheetFiles = fileInfos.filter((file) => (file.sheets || []).length > 1);
+  if (!multiSheetFiles.length) {
+    return fileInfos.map((file) => ({
+      filePath: file.filePath,
+      sheetName: (file.sheets || [])[0] || ''
+    }));
+  }
+
+  return showSheetPicker(fileInfos);
+}
+
+function showSheetPicker(fileInfos) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-modal-overlay';
+    const rows = fileInfos.map((file, index) => {
+      const options = (file.sheets || []).map((sheet) => `<option value="${escapeHtml(sheet)}">${escapeHtml(sheet)}</option>`).join('');
+      return `
+        <label class="sheet-picker-row">
+          <span>${escapeHtml(file.fileName)}</span>
+          <select data-index="${index}">${options}</select>
+        </label>
+      `;
+    }).join('');
+
+    overlay.innerHTML = `
+      <div class="sheet-modal">
+        <header>
+          <h2>Chọn sheet để load</h2>
+          <p>File có nhiều sheet cần chọn sheet dùng để so sánh.</p>
+        </header>
+        <div class="sheet-picker-list">${rows}</div>
+        <footer>
+          <button class="button" data-action="cancel">Hủy</button>
+          <button class="button button-primary" data-action="confirm">Load sheet đã chọn</button>
+        </footer>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      overlay.remove();
+      resolve([]);
+    });
+
+    overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => {
+      const selections = fileInfos.map((file, index) => {
+        const select = overlay.querySelector(`select[data-index="${index}"]`);
+        return {
+          filePath: file.filePath,
+          sheetName: select ? select.value : (file.sheets || [])[0] || ''
+        };
+      });
+      overlay.remove();
+      resolve(selections);
+    });
+  });
+}
+
 async function restoreRecentFiles() {
   try {
     const recent = await window.inventoryApi.loadRecent();
@@ -212,8 +287,10 @@ async function restoreRecentFiles() {
     const bomFiles = recent.bomFiles || [];
     if (!khoFiles.length && !bomFiles.length) return;
 
-    state.khoPaths = khoFiles.map((file) => file.filePath);
-    state.bomPaths = bomFiles.map((file) => file.filePath);
+    state.khoSources = khoFiles.map(toFileSource);
+    state.bomSources = bomFiles.map(toFileSource);
+    state.khoPaths = state.khoSources.map((file) => file.filePath);
+    state.bomPaths = state.bomSources.map((file) => file.filePath);
     state.khoRows = renumberRows(khoFiles.flatMap((file) => parseKhoRows(file.rows)));
     state.bomRows = renumberRows(bomFiles.flatMap((file) => parseBomRows(file.rows)));
     state.khoFileName = khoFiles.map(formatFileLabel).join('; ');
@@ -241,12 +318,29 @@ function appendPaths(paths, nextPaths) {
   return Array.from(new Set(paths.concat(nextPaths)));
 }
 
+function appendSources(sources, nextSources) {
+  const map = new Map();
+  sources.concat(nextSources).forEach((source) => {
+    map.set(`${source.filePath}::${source.sheetName}`, source);
+  });
+  return Array.from(map.values());
+}
+
+function toFileSource(file) {
+  return {
+    filePath: file.filePath,
+    sheetName: file.sheetName || ''
+  };
+}
+
 function formatFileLabel(file) {
   return `${file.fileName} / ${file.sheetName}`;
 }
 
 async function saveRecentFiles() {
   await window.inventoryApi.saveRecent({
+    khoSources: state.khoSources,
+    bomSources: state.bomSources,
     khoPaths: state.khoPaths,
     bomPaths: state.bomPaths
   });
@@ -276,6 +370,8 @@ function clearData() {
   state.bomFileName = '';
   state.khoPaths = [];
   state.bomPaths = [];
+  state.khoSources = [];
+  state.bomSources = [];
   state.khoRows = [];
   state.bomRows = [];
   state.compareRows = [];

@@ -558,6 +558,82 @@ tr.status-extra td {
   color: var(--muted);
 }
 
+.sheet-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.sheet-modal {
+  width: min(720px, 100%);
+  max-height: min(620px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.sheet-modal header,
+.sheet-modal footer {
+  padding: 14px 16px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.sheet-modal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet-modal p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sheet-picker-list {
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.sheet-picker-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-picker-row span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.sheet-picker-row select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
 .toast {
   position: fixed;
   right: 18px;

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('inventoryApi', {
   openExcel: () => ipcRenderer.invoke('excel:open'),
+  readExcelSheets: (selections) => ipcRenderer.invoke('excel:readSheets', selections),
   exportExcel: (payload) => ipcRenderer.invoke('excel:export', payload),
   exportCompare: (payload) => ipcRenderer.invoke('excel:exportCompare', payload),
   exportDiscrepancy: (payload) => ipcRenderer.invoke('excel:exportDiscrepancy', payload),

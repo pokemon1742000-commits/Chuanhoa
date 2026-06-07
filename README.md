@@ -6,6 +6,7 @@ Phần mềm Electron dùng để load **Dữ Liệu Kho** và **Dữ Liệu Thi
 
 - Chọn một hoặc nhiều file **Dữ Liệu Kho** trong cùng một lần load.
 - Chọn một hoặc nhiều file **Dữ Liệu Thiết Kế** trong cùng một lần load.
+- Nếu file Excel có nhiều sheet, app cho chọn sheet cần load trước khi so sánh.
 - Có thể load thêm nhiều lần; dữ liệu được cộng dồn.
 - Tách dữ liệu kho từ cột A theo dấu `,`.
 - Tự chuẩn hóa các dòng kho bị đảo vị trí `nhà sản xuất, số lượng` thành `số lượng, nhà sản xuất`.
@@ -48,8 +49,8 @@ npm run build:win
 
 File sau khi build nằm trong thư mục `release`:
 
-- `Inventory Compare-Setup-2.0.0-x64.exe`: bản cài đặt.
-- `Inventory Compare-Portable-2.0.0-x64.exe`: bản portable.
+- `Inventory-Compare-Setup-2.1.0-x64.exe`: bản cài đặt.
+- `Inventory-Compare-Portable-2.1.0-x64.exe`: bản portable.
 - `win-unpacked/Inventory Compare.exe`: bản unpacked để chạy thử nhanh.
 
 ## Hướng dẫn sử dụng
@@ -58,8 +59,9 @@ File sau khi build nằm trong thư mục `release`:
 
 1. Bấm `Dữ Liệu Kho`.
 2. Chọn một hoặc nhiều file Excel kho.
-3. Sau khi load file đầu tiên, nút đổi thành `Thêm Dữ Liệu Kho`.
-4. Nếu chọn nhiều file, app sẽ đọc tất cả file đã chọn và cộng dồn vào bảng kho.
+3. Nếu file có nhiều sheet, chọn sheet cần dùng trong hộp `Chọn sheet để load`.
+4. Sau khi load file đầu tiên, nút đổi thành `Thêm Dữ Liệu Kho`.
+5. Nếu chọn nhiều file, app sẽ đọc tất cả sheet đã chọn và cộng dồn vào bảng kho.
 
 Format dữ liệu kho:
 
@@ -88,7 +90,7 @@ App sẽ tự hiểu `Số lượng/máy = 1` và `Nhà sản xuất = FBT`.
 
 1. Bấm `Dữ Liệu Thiết Kế`.
 2. Chọn một hoặc nhiều file Excel BOM/thiết kế.
-3. App đọc sheet đầu tiên của từng file.
+3. Nếu file có nhiều sheet, chọn sheet cần dùng trong hộp `Chọn sheet để load`.
 4. Dữ liệu được cộng dồn vào bảng thiết kế.
 
 Các cột được đọc:

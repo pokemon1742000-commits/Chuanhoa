@@ -35,7 +35,11 @@ ipcMain.handle('excel:open', async () => {
     return null;
   }
 
-  return result.filePaths.map(readExcelFile);
+  return result.filePaths.map(readExcelInfo);
+});
+
+ipcMain.handle('excel:readSheets', async (_event, selections) => {
+  return selections.map((selection) => readExcelFile(selection.filePath, selection.sheetName));
 });
 
 ipcMain.handle('update:check', async () => {
@@ -57,13 +61,15 @@ ipcMain.handle('update:check', async () => {
 ipcMain.handle('recent:load', async () => {
   const recent = readRecentState();
   return {
-    khoFiles: loadRecentFiles(recent.khoPaths || []),
-    bomFiles: loadRecentFiles(recent.bomPaths || [])
+    khoFiles: loadRecentFiles(recent.khoSources || recent.khoPaths || []),
+    bomFiles: loadRecentFiles(recent.bomSources || recent.bomPaths || [])
   };
 });
 
 ipcMain.handle('recent:save', async (_event, payload) => {
   writeRecentState({
+    khoSources: payload.khoSources || [],
+    bomSources: payload.bomSources || [],
     khoPaths: payload.khoPaths || [],
     bomPaths: payload.bomPaths || [],
     updatedAt: new Date().toISOString()
@@ -72,7 +78,7 @@ ipcMain.handle('recent:save', async (_event, payload) => {
 });
 
 ipcMain.handle('recent:clear', async () => {
-  writeRecentState({ khoPaths: [], bomPaths: [], updatedAt: new Date().toISOString() });
+  writeRecentState({ khoSources: [], bomSources: [], khoPaths: [], bomPaths: [], updatedAt: new Date().toISOString() });
   return true;
 });
 
@@ -183,9 +189,18 @@ function addCompareSheet(workbook, compareRows) {
   return compareSheet;
 }
 
-function readExcelFile(filePath) {
+function readExcelInfo(filePath) {
+  const workbook = XLSX.readFile(filePath, { bookSheets: true });
+  return {
+    filePath,
+    fileName: path.basename(filePath),
+    sheets: workbook.SheetNames
+  };
+}
+
+function readExcelFile(filePath, selectedSheetName) {
   const workbook = XLSX.readFile(filePath, { cellDates: false, raw: false });
-  const sheetName = workbook.SheetNames[0];
+  const sheetName = workbook.SheetNames.includes(selectedSheetName) ? selectedSheetName : workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
@@ -201,18 +216,19 @@ function readExcelFile(filePath) {
   };
 }
 
-function loadRecentFiles(paths) {
-  return paths
-    .filter((filePath) => {
+function loadRecentFiles(sources) {
+  return sources
+    .map(normalizeRecentSource)
+    .filter((source) => {
       try {
-        return fs.existsSync(filePath);
+        return fs.existsSync(source.filePath);
       } catch {
         return false;
       }
     })
-    .map((filePath) => {
+    .map((source) => {
       try {
-        return readExcelFile(filePath);
+        return readExcelFile(source.filePath, source.sheetName);
       } catch {
         return null;
       }
@@ -231,6 +247,17 @@ function readRecentState() {
   } catch {
     return { khoPaths: [], bomPaths: [] };
   }
+}
+
+function normalizeRecentSource(source) {
+  if (typeof source === 'string') {
+    return { filePath: source, sheetName: '' };
+  }
+
+  return {
+    filePath: source.filePath,
+    sheetName: source.sheetName || ''
+  };
 }
 
 function writeRecentState(payload) {
