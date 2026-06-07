@@ -48,8 +48,8 @@ npm run build:win
 
 File sau khi build nằm trong thư mục `release`:
 
-- `Inventory-Compare-Setup-2.2.0-x64.exe`: bản cài đặt.
-- `Inventory-Compare-Portable-2.2.0-x64.exe`: bản portable.
+- `Inventory-Compare-Setup-2.2.1-x64.exe`: bản cài đặt.
+- `Inventory-Compare-Portable-2.2.1-x64.exe`: bản portable.
 - `win-unpacked/Inventory Compare.exe`: bản unpacked để chạy thử nhanh.
 
 ## Hướng dẫn sử dụng
