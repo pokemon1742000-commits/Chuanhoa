@@ -19,12 +19,18 @@ namespace LicenseGenerator
             Console.WriteLine("-------------------------------------");
 
             int count = ReadCount(args);
-            string outputPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "licenses.json");
+            List<string> outputPaths = GetLicenseFilePaths();
+            HashSet<string> uniqueLicenses = new HashSet<string>();
 
-            List<string> licenses = ReadExistingLicenses(outputPath);
-            HashSet<string> uniqueLicenses = new HashSet<string>(licenses);
+            foreach (string outputPath in outputPaths)
+            {
+                foreach (string license in ReadExistingLicenses(outputPath))
+                {
+                    uniqueLicenses.Add(license);
+                }
+            }
+
             List<string> createdLicenses = new List<string>();
-
             while (createdLicenses.Count < count)
             {
                 string license = CreateLicense();
@@ -34,23 +40,75 @@ namespace LicenseGenerator
                 }
             }
 
-            WriteLicenseFile(outputPath, uniqueLicenses.OrderBy(value => value).ToList());
-            File.SetAttributes(outputPath, File.GetAttributes(outputPath) | FileAttributes.Hidden);
+            List<string> sortedLicenses = uniqueLicenses.OrderBy(value => value).ToList();
+            List<string> updatedPaths = new List<string>();
+            List<string> failedPaths = new List<string>();
+
+            foreach (string outputPath in outputPaths)
+            {
+                try
+                {
+                    WriteLicenseFile(outputPath, sortedLicenses);
+                    File.SetAttributes(outputPath, File.GetAttributes(outputPath) | FileAttributes.Hidden);
+                    updatedPaths.Add(outputPath);
+                }
+                catch (Exception error)
+                {
+                    failedPaths.Add(outputPath + " - " + error.Message);
+                }
+            }
 
             Console.WriteLine();
-            Console.WriteLine("License mới:");
+            Console.WriteLine("New licenses:");
             foreach (string license in createdLicenses)
             {
                 Console.WriteLine(license);
             }
 
             Console.WriteLine();
-            Console.WriteLine("Đã cập nhật file ẩn:");
-            Console.WriteLine(outputPath);
+            Console.WriteLine("Updated hidden license files:");
+            foreach (string updatedPath in updatedPaths)
+            {
+                Console.WriteLine(updatedPath);
+            }
+
+            if (failedPaths.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Could not update:");
+                foreach (string failedPath in failedPaths)
+                {
+                    Console.WriteLine(failedPath);
+                }
+            }
+
             Console.WriteLine();
-            Console.WriteLine("Nhấn phím bất kỳ để đóng.");
+            Console.WriteLine("Press any key to close.");
             Console.ReadKey(true);
             return 0;
+        }
+
+        private static List<string> GetLicenseFilePaths()
+        {
+            List<string> paths = new List<string>();
+            paths.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "licenses.json"));
+
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrWhiteSpace(appData))
+            {
+                paths.Add(Path.Combine(appData, "Inventory Compare", "licenses.json"));
+            }
+
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localAppData))
+            {
+                paths.Add(Path.Combine(localAppData, "Inventory Compare", "licenses.json"));
+            }
+
+            return paths
+                .Where(pathValue => !string.IsNullOrWhiteSpace(pathValue))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private static int ReadCount(string[] args)
@@ -61,7 +119,7 @@ namespace LicenseGenerator
                 return argCount;
             }
 
-            Console.Write("Số lượng license cần tạo: ");
+            Console.Write("Number of licenses to create: ");
             string input = Console.ReadLine();
             int count;
             if (int.TryParse(input, out count) && count > 0)
@@ -89,6 +147,12 @@ namespace LicenseGenerator
 
         private static void WriteLicenseFile(string filePath, List<string> licenses)
         {
+            string directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
             string json = "{\r\n  \"licenses\": [\r\n" +
                 string.Join(",\r\n", licenses.Select(license => "    \"" + license + "\"")) +
                 "\r\n  ]\r\n}\r\n";

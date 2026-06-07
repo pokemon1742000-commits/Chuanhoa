@@ -466,16 +466,19 @@ function activateLicense(code) {
 function findLicenseFile() {
   const candidatePaths = [
     path.join(app.getPath('userData'), 'licenses.json'),
-    path.join(process.cwd(), 'licenses.json')
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'Inventory Compare', 'licenses.json') : '',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Inventory Compare', 'licenses.json') : '',
+    path.join(process.cwd(), 'licenses.json'),
+    path.join(process.cwd(), 'release', 'licenses.json'),
+    path.join(__dirname, 'licenses.json'),
+    path.join(__dirname, 'release', 'licenses.json')
   ];
 
   if (app.isPackaged) {
     candidatePaths.unshift(path.join(path.dirname(app.getPath('exe')), 'licenses.json'));
-  } else {
-    candidatePaths.unshift(path.join(__dirname, 'licenses.json'));
   }
 
-  return candidatePaths.find((filePath) => fs.existsSync(filePath));
+  return candidatePaths.filter(Boolean).find((filePath) => fs.existsSync(filePath));
 }
 
 function readLicensePool(filePath) {
