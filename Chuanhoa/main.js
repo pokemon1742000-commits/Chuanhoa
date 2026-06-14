@@ -37,6 +37,18 @@ ipcMain.handle('app:openGithub', async () => {
   return true;
 });
 
+ipcMain.handle('app:confirmPendingExport', async () => {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: ['Tiếp tục', 'Hủy bỏ'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Còn mã chưa xác nhận',
+    message: 'Vẫn còn mã chưa xác nhận bạn có muốn tiếp tục không?'
+  });
+  return result.response === 0;
+});
+
 ipcMain.handle('app:licenseStatus', async () => getLicenseStatus());
 
 ipcMain.handle('app:activateLicense', async (_event, code) => activateLicense(code));
@@ -106,8 +118,8 @@ ipcMain.handle('recent:clear', async () => {
 
 ipcMain.handle('excel:export', async (_event, payload) => {
   const result = await dialog.showSaveDialog({
-    title: 'Luu bao cao so sanh',
-    defaultPath: `BaoCao_SoSanh_${getTimestamp()}.xlsx`,
+    title: 'Luu de nghi mua hang',
+    defaultPath: `DeNghiMuaHang_${getTimestamp()}.xlsx`,
     filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }]
   });
 
@@ -116,31 +128,9 @@ ipcMain.handle('excel:export', async (_event, payload) => {
   }
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Inventory Compare App';
+  workbook.creator = 'Design Code Standardizer';
   workbook.created = new Date();
-
-  addSheet(workbook, 'Du Lieu Ma', [
-    ['STT', 'Ma ban ve', 'Ten hang', 'Don vi tinh']
-  ], payload.khoRows.map((row, index) => [
-    index + 1,
-    row.drawingCode,
-    row.itemName,
-    row.unit
-  ]));
-
-  addSheet(workbook, 'Bomlist Thiet Ke', [
-    ['STT', 'Ten mat hang', 'Ma ban ve', 'Nha san xuat', 'So luong/may', 'Don vi tinh']
-  ], payload.bomRows.map((row, index) => [
-    index + 1,
-    row.itemName,
-    row.drawingCode,
-    row.manufacturer,
-    row.quantity,
-    row.unit
-  ]));
-
-  addCompareSheetWithConfirm(workbook, payload.compareRows || [], payload.confirmRows || []);
-  addDiscrepancySheet(workbook, payload.discrepancyRows || []);
+  addPurchaseRequestSheet(workbook, payload);
 
   await workbook.xlsx.writeFile(result.filePath);
   return result.filePath;
@@ -185,6 +175,180 @@ ipcMain.handle('excel:exportDiscrepancy', async (_event, payload) => {
   await workbook.xlsx.writeFile(result.filePath);
   return result.filePath;
 });
+
+function addPurchaseRequestSheet(workbook, payload) {
+  const sheet = workbook.addWorksheet('De Nghi Mua Hang');
+  const metadata = payload.metadata || {};
+  const rows = payload.purchaseRows || [];
+  const machineQuantity = Number(metadata.machineQuantity) || 1;
+
+  sheet.columns = [
+    { width: 6 },
+    { width: 34 },
+    { width: 28 },
+    { width: 18 },
+    { width: 18 },
+    { width: 18 },
+    { width: 18 },
+    { width: 10 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 28 }
+  ];
+
+  sheet.mergeCells('A1:B2');
+  sheet.getCell('A1').value = 'MEIKO AUTOMATION';
+  sheet.getCell('A1').font = { name: 'Times New Roman', bold: true, size: 14, color: { argb: '1F4E8C' } };
+  sheet.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
+
+  sheet.mergeCells('K1:L2');
+  sheet.getCell('K1').value = `Mã tài liệu: ${metadata.documentCode || 'PUR-06-12-F-04-01'}`;
+  sheet.getCell('K1').font = { name: 'Times New Roman', size: 12 };
+  sheet.getCell('K1').alignment = { vertical: 'middle', horizontal: 'right' };
+
+  sheet.mergeCells('A3:H3');
+  sheet.getCell('A3').value = 'Address: 1F, EMS No.2 Building, Lot CN9, Thach That-Quoc Oai IZ, Phung Xa Commune, Thach That Dist, Ha Noi City, Vietnam.';
+  sheet.getCell('A3').font = { name: 'Times New Roman', italic: true };
+
+  sheet.mergeCells('A4:B4');
+  sheet.getCell('A4').value = 'Tel: 024-6662-6684';
+  sheet.getCell('A4').font = { name: 'Times New Roman', italic: true };
+
+  sheet.mergeCells('J4:L4');
+  sheet.getCell('J4').value = '*Phòng mua sẽ ghi khi ký tiếp nhận';
+  sheet.getCell('J4').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('J4').alignment = { horizontal: 'right' };
+
+  sheet.mergeCells('A5:I6');
+  sheet.getCell('A5').value = 'ĐỀ NGHỊ MUA HÀNG';
+  sheet.getCell('A5').font = { name: 'Times New Roman', bold: true, size: 16 };
+  sheet.getCell('A5').alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.mergeCells('J5:L6');
+  sheet.getCell('J5').value = `Leadtime:\n\nSố DNMH\nPR-PUR-${metadata.purchaseNumber || ''}`;
+  sheet.getCell('J5').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('J5').alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+
+  sheet.mergeCells('A7:I7');
+  sheet.getCell('A7').value = `(${metadata.department || 'Bộ phận Cơ'})`;
+  sheet.getCell('A7').alignment = { horizontal: 'center' };
+  sheet.getCell('A7').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } };
+
+  sheet.getCell('A8').value = `Mã dự án: ${metadata.projectCode || ''}`;
+  sheet.getCell('A8').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('A10').value = `Tên dự án: ${metadata.projectName || ''}`;
+  sheet.getCell('A10').font = { name: 'Times New Roman', bold: true, size: 12 };
+
+  sheet.mergeCells('F8:F9');
+  sheet.getCell('F8').value = 'Số lượng máy\n↓';
+  sheet.getCell('F8').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('F8').alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  sheet.getCell('F10').value = machineQuantity;
+  sheet.getCell('F10').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('F10').alignment = { horizontal: 'center' };
+  sheet.getCell('F10').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } };
+
+  sheet.mergeCells('G8:I10');
+  sheet.getCell('G8').value = 'PUR ký tiếp nhận';
+  sheet.getCell('G8').font = { name: 'Times New Roman', bold: true, size: 12 };
+  sheet.getCell('G8').alignment = { vertical: 'top', horizontal: 'center' };
+
+  sheet.getCell('J8').value = 'Duyệt';
+  sheet.getCell('K8').value = 'Kiểm tra';
+  sheet.getCell('L8').value = 'Lập';
+  ['J8', 'K8', 'L8'].forEach((address) => {
+    sheet.getCell(address).font = { name: 'Times New Roman', size: 12 };
+    sheet.getCell(address).alignment = { horizontal: 'center' };
+  });
+
+  sheet.mergeCells('A11:A12');
+  sheet.mergeCells('B11:B12');
+  sheet.mergeCells('C11:C12');
+  sheet.mergeCells('D11:D12');
+  sheet.mergeCells('E11:G11');
+  sheet.mergeCells('H11:H12');
+  sheet.mergeCells('I11:I12');
+  sheet.mergeCells('J11:J12');
+  sheet.mergeCells('K11:K12');
+  sheet.mergeCells('L11:L12');
+
+  const headers = {
+    A11: 'No',
+    B11: 'Name',
+    C11: 'Model/ Mã bản vẽ',
+    D11: 'Maker',
+    E11: 'Spec',
+    E12: 'Marking part',
+    F12: 'Material',
+    G12: 'Surface',
+    H11: 'Unit',
+    I11: "Q'ty/\nMachine",
+    J11: 'Number\nMachine',
+    K11: 'Grand\nTotal',
+    L11: 'Explain'
+  };
+  Object.entries(headers).forEach(([address, value]) => {
+    sheet.getCell(address).value = value;
+  });
+
+  rows.forEach((row, index) => {
+    const excelRow = sheet.getRow(13 + index);
+    const quantity = Number(row.quantity) || 0;
+    const numberMachine = Number(row.machineQuantity) || machineQuantity;
+    excelRow.values = [
+      index + 1,
+      row.itemName || '',
+      row.drawingCode || '',
+      row.manufacturer || '',
+      row.markingPart || '',
+      row.material || '',
+      row.surface || '',
+      row.unit || '',
+      quantity || '',
+      numberMachine || '',
+      quantity && numberMachine ? quantity * numberMachine : '',
+      row.explain || ''
+    ];
+  });
+
+  formatPurchaseRequestSheet(sheet, 12 + rows.length);
+  return sheet;
+}
+
+function formatPurchaseRequestSheet(sheet, lastRowNumber) {
+  for (let rowNumber = 1; rowNumber <= Math.max(lastRowNumber, 13); rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    row.height = rowNumber >= 11 ? 24 : undefined;
+    for (let colNumber = 1; colNumber <= 12; colNumber += 1) {
+      const cell = row.getCell(colNumber);
+      cell.font = cell.font || { name: 'Times New Roman', size: 11 };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'A6A6A6' } },
+        left: { style: 'thin', color: { argb: 'A6A6A6' } },
+        bottom: { style: 'thin', color: { argb: 'A6A6A6' } },
+        right: { style: 'thin', color: { argb: 'A6A6A6' } }
+      };
+      cell.alignment = cell.alignment || { vertical: 'middle', wrapText: true };
+    }
+  }
+
+  for (let rowNumber = 11; rowNumber <= 12; rowNumber += 1) {
+    sheet.getRow(rowNumber).eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'BDD7EE' } };
+      cell.font = { name: 'Times New Roman', bold: true, size: 12 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    });
+  }
+
+  sheet.views = [{ state: 'frozen', ySplit: 12 }];
+  sheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0
+  };
+}
 
 function addCompareSheet(workbook, compareRows) {
   const compareSheet = addSheet(workbook, 'So Sanh', [

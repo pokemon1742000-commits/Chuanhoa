@@ -787,6 +787,7 @@ function isQuantityCell(value) {
 function parseBomRows(input) {
   const { rows, filePath, fileName, sheetName } = normalizeParseInput(input);
   const map = detectBomColumns(rows);
+  const metadata = extractDesignMetadata(rows, map.headerRow);
   if (map.drawing < 0 || map.quantity < 0) {
     throw new Error('Không tìm thấy cột Mã bản vẽ hoặc Số lượng/Máy trong BOM.');
   }
@@ -801,9 +802,13 @@ function parseBomRows(input) {
         drawingCode: cleanCell(row[map.drawing]),
         drawingKey: normalizeCode(row[map.drawing]),
         manufacturer: cleanCell(row[map.manufacturer]),
+        markingPart: cleanCell(row[map.markingPart]),
+        material: cleanCell(row[map.material]),
+        surface: cleanCell(row[map.surface]),
         quantity: parseQuantity(getBomQuantityCell(row, map.quantity)),
         hasQuantity: true,
         unit: cleanCell(row[map.unit]),
+        ...metadata,
         sourceFilePath: filePath,
         sourceFileName: fileName,
         sourceSheetName: sheetName,
@@ -820,6 +825,9 @@ function detectBomColumns(rows) {
     item: 1,
     drawing: 2,
     manufacturer: 3,
+    markingPart: -1,
+    material: -1,
+    surface: -1,
     quantity: 8,
     unit: -1,
     headerRow: 0
@@ -849,6 +857,15 @@ function detectBomColumns(rows) {
         found.manufacturer = true;
         map.headerRow = Math.max(map.headerRow, rowIndex);
       }
+      if (map.markingPart < 0 && matchesHeader(text, ['marking part', 'marking'])) {
+        map.markingPart = colIndex;
+      }
+      if (map.material < 0 && matchesHeader(text, ['material', 'vat lieu'])) {
+        map.material = colIndex;
+      }
+      if (map.surface < 0 && matchesHeader(text, ['surface', 'be mat'])) {
+        map.surface = colIndex;
+      }
       if (!found.quantity && isBomQuantityHeader(text)) {
         map.quantity = colIndex;
         found.quantity = true;
@@ -861,6 +878,43 @@ function detectBomColumns(rows) {
   });
 
   return map;
+}
+
+function extractDesignMetadata(rows, headerRow) {
+  const topRows = rows.slice(0, Math.max(0, headerRow));
+  return {
+    documentCode: findMetadataValue(topRows, ['ma tai lieu', 'document code']),
+    projectCode: findMetadataValue(topRows, ['ma du an', 'project code']),
+    projectName: findMetadataValue(topRows, ['ten du an', 'project name']),
+    machineQuantity: findMetadataValue(topRows, ['so luong may', 'number machine', 'machine quantity']),
+    department: findMetadataValue(topRows, ['bo phan', 'department'])
+  };
+}
+
+function findMetadataValue(rows, aliases) {
+  for (const row of rows) {
+    for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+      const text = normalizeText(row[colIndex]);
+      if (!aliases.some((alias) => matchesHeader(text, [alias]))) continue;
+
+      const inlineValue = extractInlineMetadataValue(row[colIndex]);
+      if (inlineValue) return inlineValue;
+
+      for (let nextIndex = colIndex + 1; nextIndex < row.length; nextIndex += 1) {
+        const value = cleanCell(row[nextIndex]);
+        if (value) return value;
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractInlineMetadataValue(value) {
+  const text = cleanCell(value);
+  const separatorIndex = text.search(/[:：]/);
+  if (separatorIndex < 0) return '';
+  return text.slice(separatorIndex + 1).trim();
 }
 
 function isBomItemHeader(text) {
@@ -1037,7 +1091,15 @@ function aggregateRows(rows, type) {
         mergeCount: 0,
         itemName: row.itemName || '',
         manufacturer: row.manufacturer || '',
+        markingPart: row.markingPart || '',
+        material: row.material || '',
+        surface: row.surface || '',
         unit: row.unit || '',
+        documentCode: row.documentCode || '',
+        projectCode: row.projectCode || '',
+        projectName: row.projectName || '',
+        machineQuantity: row.machineQuantity || '',
+        department: row.department || '',
         sourceNotes: []
       });
     }
@@ -1046,7 +1108,15 @@ function aggregateRows(rows, type) {
     item.mergeCount += 1;
     if (!item.itemName && row.itemName) item.itemName = row.itemName;
     if (!item.manufacturer && row.manufacturer) item.manufacturer = row.manufacturer;
+    if (!item.markingPart && row.markingPart) item.markingPart = row.markingPart;
+    if (!item.material && row.material) item.material = row.material;
+    if (!item.surface && row.surface) item.surface = row.surface;
     if (!item.unit && row.unit) item.unit = row.unit;
+    if (!item.documentCode && row.documentCode) item.documentCode = row.documentCode;
+    if (!item.projectCode && row.projectCode) item.projectCode = row.projectCode;
+    if (!item.projectName && row.projectName) item.projectName = row.projectName;
+    if (!item.machineQuantity && row.machineQuantity) item.machineQuantity = row.machineQuantity;
+    if (!item.department && row.department) item.department = row.department;
     if (row.sourceNote && !item.sourceNotes.includes(row.sourceNote)) {
       item.sourceNotes.push(row.sourceNote);
     }
@@ -1156,6 +1226,11 @@ function createCompareRow(design, order, similarity, corrected) {
     orderDrawingCode: order.drawingCode,
     orderItemName: order.itemName,
     itemName: design.itemName || order.itemName,
+    manufacturer: design.manufacturer,
+    markingPart: design.markingPart,
+    material: design.material,
+    surface: design.surface,
+    quantity: design.quantity,
     designUnit: design.unit,
     orderUnit: order.unit,
     unit: order.unit || design.unit,
@@ -1174,6 +1249,13 @@ function createNewCodeRow(design, suggestion) {
     designDrawingCode: design.drawingCode,
     suggestedOrderDrawingCode: suggestedItem?.drawingCode || '',
     suggestedOrderItemName: suggestedItem?.itemName || '',
+    itemName: design.itemName || '',
+    manufacturer: design.manufacturer || '',
+    markingPart: design.markingPart || '',
+    material: design.material || '',
+    surface: design.surface || '',
+    unit: design.unit || '',
+    quantity: design.quantity || '',
     nameSimilarity: suggestion ? `${Math.round(suggestion.similarity * 100)}%` : '',
     note: (design.sourceNotes || []).join('; ')
   };
@@ -1224,7 +1306,7 @@ function rejectConfirm(index) {
   runCompare();
 }
 
-async function exportCurrentTable() {
+async function exportCurrentTableLegacy() {
   try {
     if (state.view === 'compare') {
       if (!state.compareRows.length && !state.confirmRows.length) {
@@ -1333,9 +1415,7 @@ function renderKhoTable() {
 }
 
 function canExportCurrentTable() {
-  if (state.view === 'compare') return state.compareRows.length > 0 || state.confirmRows.length > 0;
-  if (state.view === 'discrepancy') return state.discrepancyRows.length > 0;
-  return false;
+  return state.compareRows.length > 0 || state.discrepancyRows.length > 0 || state.confirmRows.length > 0;
 }
 
 function renderTable(container, rows, tableColumns, rowClassFn, options = {}) {
@@ -1492,6 +1572,87 @@ function updateConfirmSelection(index, selectedIndex) {
   row.similarity = selected.similarity;
 }
 
+async function exportCurrentTable() {
+  try {
+    if (!state.compareRows.length && !state.discrepancyRows.length && !state.confirmRows.length) {
+      showToast('Chua co du lieu de xuat Excel.');
+      return;
+    }
+
+    if (state.confirmRows.length) {
+      const shouldContinue = await window.inventoryApi.confirmPendingExport();
+      if (!shouldContinue) {
+        showToast('Da huy xuat Excel.');
+        return;
+      }
+    }
+
+    const filePath = await window.inventoryApi.exportExcel(buildPurchaseExportPayload());
+    if (filePath) showToast(`Da xuat De Nghi Mua Hang: ${filePath}`);
+  } catch (error) {
+    showToast(`Khong the xuat Excel: ${error.message}`);
+  }
+}
+
+function buildPurchaseExportPayload() {
+  const metadata = getExportMetadata();
+  const byDesignKey = new Map();
+  state.compareRows.forEach((row) => {
+    byDesignKey.set(row.designKey, createPurchaseRowFromCompare(row, metadata));
+  });
+  state.discrepancyRows.forEach((row) => {
+    if (!byDesignKey.has(row.designKey)) {
+      byDesignKey.set(row.designKey, createPurchaseRowFromDiscrepancy(row, metadata));
+    }
+  });
+
+  return {
+    metadata,
+    purchaseRows: Array.from(byDesignKey.values())
+  };
+}
+
+function getExportMetadata() {
+  const source = state.bomRows.find((row) => row.projectCode || row.projectName || row.machineQuantity || row.department) || {};
+  return {
+    documentCode: source.documentCode || '',
+    projectCode: source.projectCode || '',
+    projectName: source.projectName || '',
+    machineQuantity: parseQuantity(source.machineQuantity) || 1,
+    department: source.department || 'Bo phan Co'
+  };
+}
+
+function createPurchaseRowFromCompare(row, metadata) {
+  return {
+    itemName: row.itemName || row.orderItemName || '',
+    drawingCode: row.designDrawingCode || '',
+    manufacturer: row.manufacturer || '',
+    markingPart: row.markingPart || '',
+    material: row.material || '',
+    surface: row.surface || '',
+    unit: row.designUnit || row.unit || '',
+    quantity: row.quantity || '',
+    machineQuantity: metadata.machineQuantity || 1,
+    explain: row.note || 'Ma giong nhau'
+  };
+}
+
+function createPurchaseRowFromDiscrepancy(row, metadata) {
+  return {
+    itemName: row.itemName || '',
+    drawingCode: row.designDrawingCode || '',
+    manufacturer: row.manufacturer || '',
+    markingPart: row.markingPart || '',
+    material: row.material || '',
+    surface: row.surface || '',
+    unit: row.unit || '',
+    quantity: row.quantity || '',
+    machineQuantity: metadata.machineQuantity || 1,
+    explain: row.note || 'Ma moi'
+  };
+}
+
 function filterRows(rows) {
   if (!state.search) return rows;
   const query = normalizeText(state.search);
@@ -1536,6 +1697,8 @@ function normalizeText(value) {
   return cleanCell(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();

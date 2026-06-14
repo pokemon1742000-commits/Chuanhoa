@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('inventoryApi', {
   activateLicense: (code) => ipcRenderer.invoke('app:activateLicense', code),
   quitApp: () => ipcRenderer.invoke('app:quit'),
   openGithub: () => ipcRenderer.invoke('app:openGithub'),
+  confirmPendingExport: () => ipcRenderer.invoke('app:confirmPendingExport'),
   openExcel: () => ipcRenderer.invoke('excel:open'),
   readExcelSheets: (selections) => ipcRenderer.invoke('excel:readSheets', selections),
   exportExcel: (payload) => ipcRenderer.invoke('excel:export', payload),
